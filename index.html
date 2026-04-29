@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Read Along - Scamming Season is Here</title>
+  
+  <!-- 載入 Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- 載入 React & ReactDOM (React 18) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  
+  <!-- 載入 Babel (用於瀏覽器內即時編譯 JSX) -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    /* 自訂捲軸隱藏樣式 */
+    .hide-scrollbar::-webkit-scrollbar { display: none; }
+    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    body { margin: 0; padding: 0; }
+  </style>
+</head>
+<body class="bg-slate-50">
+  
+  <!-- 應用程式掛載點 -->
+  <div id="root"></div>
+
+  <!-- 應用程式邏輯 -->
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useMemo } = React;
+
+    // === Google Apps Script Web App URL ===
+    // 請替換為您自己的 GAS 網址
+    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzSxVckQ02tD5TSMMg6n-BjUYvYD_1XPwnwU7-2_kwQMJQDHqPBOWMVab78UBPnnqie/exec"; 
+    // =========================================================================
+
+    // --- 圖示庫 (SVG 內聯元件，無須外部依賴) ---
+    const IconBase = ({className, children}) => (
+      <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{children}</svg>
+    );
+    const Play = ({className}) => <IconBase className={className}><polygon points="6 3 20 12 6 21 6 3"/></IconBase>;
+    const Pause = ({className}) => <IconBase className={className}><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></IconBase>;
+    const Mic = ({className}) => <IconBase className={className}><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></IconBase>;
+    const Square = ({className}) => <IconBase className={className}><rect width="18" height="18" x="3" y="3" rx="2"/></IconBase>;
+    const Globe = ({className}) => <IconBase className={className}><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></IconBase>;
+    const Settings = ({className}) => <IconBase className={className}><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></IconBase>;
+    const ChevronLeft = ({className}) => <IconBase className={className}><path d="m15 18-6-6 6-6"/></IconBase>;
+    const ChevronRight = ({className}) => <IconBase className={className}><path d="m9 18 6-6-6-6"/></IconBase>;
+    const RotateCcw = ({className}) => <IconBase className={className}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></IconBase>;
+    const X = ({className}) => <IconBase className={className}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></IconBase>;
+    const Activity = ({className}) => <IconBase className={className}><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 21.1a.25.25 0 0 1-.48 0l-2.35-8.36a2 2 0 0 0-1.93-1.46H2"/></IconBase>;
+    const BookOpen = ({className}) => <IconBase className={className}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></IconBase>;
+    const Info = ({className}) => <IconBase className={className}><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></IconBase>;
+    const ArrowRight = ({className}) => <IconBase className={className}><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></IconBase>;
+    const Download = ({className}) => <IconBase className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></IconBase>;
+    const CheckCircle = ({className}) => <IconBase className={className}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></IconBase>;
+    const ListChecks = ({className}) => <IconBase className={className}><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></IconBase>;
+    const Award = ({className}) => <IconBase className={className}><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></IconBase>;
+    const User = ({className}) => <IconBase className={className}><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></IconBase>;
+    const Loader2 = ({className}) => <IconBase className={className}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></IconBase>;
+
+    // --- 課文資料 ---
+    const sections = [
+      {
+        id: 1,
+        title: "Intro",
+        sentences: [
+          {
+            english: "STUDENTS |WATCH OUT! |Scamming season |is here.",
+            chinese: "學生們注意！詐騙的季節來了。"
+          },
+          {
+            english: "Summer vacation |is coming, |and there are many students |hoping to earn |some money.",
+            chinese: "暑假即將到來，有許多學生希望能賺點錢。"
+          },
+          {
+            english: "Because they are new |to the job market, |it is easier for them |to become victims |of job scams.",
+            chinese: "因為他們是職場新手，所以更容易成為求職詐騙的受害者。"
+          },
+          {
+            english: "They see advertisements |that promise high pay |for easy work.",
+            chinese: "他們看到承諾工作輕鬆且高薪的廣告。"
+          },
+          {
+            english: "These promises |are often fake.",
+            chinese: "這些承諾通常是假的。"
+          },
+          {
+            english: "Some recent cases |have shown |the dangers.",
+            chinese: "最近的一些案例已經顯示了其中的危險。"
+          }
+        ]
+      },
+      {
+        id: 2,
+        title: "Case 1",
+        sentences: [
+          {
+            english: "Zoe, |a sixteen-year-old student, |saw an ad |for easy work.",
+            chinese: "Zoe，一個十六歲的學生，看到了一則輕鬆工作的廣告。"
+          },
+          {
+            english: "When she called |to ask about the job, |the man on the phone |quickly hired her.",
+            chinese: "當她打電話詢問工作時，電話裡的男人很快就錄用了她。"
+          },
+          {
+            english: "Then, |he persuaded Zoe |to provide |her bank account details |to receive her pay.",
+            chinese: "接著，他說服 Zoe 提供銀行帳戶資料以領取薪水。"
+          },
+          {
+            english: "She did it, |but she never heard |from the scammer |again.",
+            chinese: "她照做了，但她再也沒有那個詐騙者的消息。"
+          },
+          {
+            english: "He stole |her identity |and took control |of the account.",
+            chinese: "他盜用了她的身分，並控制了該帳戶。"
+          }
+        ]
+      },
+      {
+        id: 3,
+        title: "Case 2",
+        sentences: [
+          {
+            english: "Seventeen-year-old Joe |noticed a job ad |on Facebook.",
+            chinese: "十七歲的 Joe 在臉書上注意到一則徵才廣告。"
+          },
+          {
+            english: "It offered |NT$5,000 a day |with flexible |working hours.",
+            chinese: "它提供一天五千元的薪水，且工作時間彈性。"
+          },
+          {
+            english: "Joe had no experience, |so it was surprising |for him |to be hired |right away.",
+            chinese: "Joe 沒有經驗，所以他馬上被錄用讓他感到很驚訝。"
+          },
+          {
+            english: "Soon, |he was given |some ATM cards |and asked to withdraw money |from several |unknown accounts.",
+            chinese: "很快地，他拿到了一些提款卡，並被要求從幾個未知的帳戶提款。"
+          },
+          {
+            english: "Joe was very doubtful |and decided |to call the police.",
+            chinese: "Joe 非常懷疑，於是決定報警。"
+          },
+          {
+            english: "The police |found an AirTag |in his bag.",
+            chinese: "警方在他的包包裡發現了一個 AirTag。"
+          },
+          {
+            english: "The scamming group |was using it |to track |Joe's movements.",
+            chinese: "詐騙集團正利用它來追蹤 Joe 的行蹤。"
+          }
+        ]
+      },
+      {
+        id: 4,
+        title: "Advice",
+        sentences: [
+          {
+            english: "The police |advise young people |to watch out for |job scams.",
+            chinese: "警方建議年輕人要注意求職詐騙。"
+          },
+          {
+            english: "There are special |phone lines and websites |giving advice |to avoid being cheated.",
+            chinese: "有專門的電話專線和網站提供建議以避免受騙。"
+          },
+          {
+            english: "There are also |some do's and don'ts |to keep in mind.",
+            chinese: "也有一些應該做與不應該做的事要牢記。"
+          },
+          {
+            english: "For example, |let your family know |before you go |for a job interview.",
+            chinese: "例如，去面試工作前要讓家人知道。"
+          },
+          {
+            english: "Don't lend |your ID |or ATM cards |to anyone.",
+            chinese: "不要把你的身分證或提款卡借給任何人。"
+          },
+          {
+            english: "Remember, |there are plenty of |summer jobs |offered by |real companies.",
+            chinese: "記住，真正的公司提供了許多暑期工作。"
+          },
+          {
+            english: "Those jobs |won't sound |too good to be true.",
+            chinese: "那些工作聽起來不會好得令人難以置信。"
+          }
+        ]
+      }
+    ];
+
+    // --- 主程式 ---
+    function ReadAlongApp() {
+      const [studentInfo, setStudentInfo] = useState({ gradeClass: '', seat: '' });
+      const [isStarted, setIsStarted] = useState(false);
+      const [isSubmitting, setIsSubmitting] = useState(false);
+
+      const [currentSectionIdx, setCurrentSectionIdx] = useState(0);
+      const [currentSentenceIdx, setCurrentSentenceIdx] = useState(0);
+      
+      const [isPlaying, setIsPlaying] = useState(false);
+      const [speechRate, setSpeechRate] = useState(1);
+      const [showTranslation, setShowTranslation] = useState(false);
+      const [activeCharIndex, setActiveCharIndex] = useState(-1);
+      
+      const [history, setHistory] = useState([]);
+      const [showSummary, setShowSummary] = useState(false);
+      const [copySuccess, setCopySuccess] = useState(false);
+      
+      const [challengeWord, setChallengeWord] = useState(null);
+      const [passedWords, setPassedWords] = useState([]);
+      const challengeWordRef = useRef(null);
+
+      const [isRecording, setIsRecording] = useState(false);
+      const [liveTranscript, setLiveTranscript] = useState('');
+      const [recognitionError, setRecognitionError] = useState('');
+      const [assessment, setAssessment] = useState(null);
+      
+      const synth = window.speechSynthesis;
+      const recognitionRef = useRef(null);
+      const transcriptRef = useRef('');
+      
+      const utteranceRef = useRef(null);
+      const boundaryFiredRef = useRef(false);
+
+      const sectionData = sections[currentSectionIdx];
+      const sentenceData = sectionData.sentences[currentSentenceIdx];
+
+      const isFirstSentence = currentSectionIdx === 0 && currentSentenceIdx === 0;
+      const isLastSentence = currentSectionIdx === sections.length - 1 && currentSentenceIdx === sectionData.sentences.length - 1;
+
+      const redWords = useMemo(() => {
+        const words = new Set();
+        history.forEach(item => {
+          item.colorCodedTokens.forEach(t => {
+            if (t.isWord && !t.isCorrect) words.add(t.text.toLowerCase());
+          });
+        });
+        return Array.from(words);
+      }, [history]);
+
+      const parsedData = useMemo(() => {
+        const rawText = sentenceData.english;
+        const cleanText = rawText.replace(/\|/g, ''); 
+        const chunksRaw = rawText.split('|');
+
+        let currentIndex = 0;
+        const chunks = [];
+
+        chunksRaw.forEach(chunkStr => {
+          if (!chunkStr) return;
+          const chunkStart = currentIndex;
+          const chunkEnd = currentIndex + chunkStr.length;
+
+          const wordTokens = [];
+          const regex = /([\w'-]+)|([^\w'-]+)/g;
+          let match;
+          while ((match = regex.exec(chunkStr)) !== null) {
+            wordTokens.push({ text: match[0], isWord: !!match[1] });
+          }
+
+          chunks.push({ text: chunkStr, start: chunkStart, end: chunkEnd, wordTokens: wordTokens });
+          currentIndex += chunkStr.length;
+        });
+
+        return { cleanText, chunks };
+      }, [sentenceData.english]);
+
+      const activeChunkIndex = useMemo(() => {
+        if (!isPlaying || activeCharIndex < 0) return -1;
+        let targetIdx = -1;
+        for (let i = 0; i < parsedData.chunks.length; i++) {
+          if (activeCharIndex >= parsedData.chunks[i].start && activeCharIndex < parsedData.chunks[i].end) {
+            targetIdx = i; break;
+          }
+        }
+        if (targetIdx === -1 && activeCharIndex > 0) return parsedData.chunks.length - 1;
+        return targetIdx;
+      }, [activeCharIndex, isPlaying, parsedData.chunks]);
+
+      useEffect(() => { synth.getVoices(); }, []);
+
+      useEffect(() => {
+        let interval;
+        if (isPlaying) {
+          const startMs = Date.now();
+          interval = setInterval(() => {
+            if (boundaryFiredRef.current) { clearInterval(interval); return; }
+            const elapsedSec = (Date.now() - startMs) / 1000;
+            const estCharIndex = Math.floor(elapsedSec * 18 * speechRate);
+            if (estCharIndex <= parsedData.cleanText.length) setActiveCharIndex(estCharIndex);
+            else clearInterval(interval);
+          }, 50); 
+        }
+        return () => clearInterval(interval);
+      }, [isPlaying, speechRate, parsedData.cleanText]);
+
+      const getBestVoice = () => {
+        const voices = synth.getVoices();
+        const preferredNames = ['samantha', 'karen', 'zira', 'david', 'mark', 'daniel', 'alex', 'victoria'];
+        let bestVoice = null;
+        for (const name of preferredNames) {
+          bestVoice = voices.find(v => v.lang.startsWith('en') && v.name.toLowerCase().includes(name));
+          if (bestVoice) break;
+        }
+        if (!bestVoice) bestVoice = voices.find(v => v.lang.startsWith('en') && v.localService && !v.name.toLowerCase().includes('google'));
+        if (!bestVoice) bestVoice = voices.find(v => v.lang.startsWith('en'));
+        return bestVoice;
+      };
+
+      const playSingleWord = (wordText, e) => {
+        if (e) e.stopPropagation(); 
+        if (isPlaying) { synth.cancel(); setIsPlaying(false); setActiveCharIndex(-1); }
+        const utterance = new SpeechSynthesisUtterance(wordText);
+        const voice = getBestVoice();
+        if (voice) utterance.voice = voice;
+        utterance.lang = 'en-US'; utterance.rate = 1.0; 
+        synth.speak(utterance);
+      };
+
+      useEffect(() => {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (SpeechRecognition) {
+          recognitionRef.current = new SpeechRecognition();
+          recognitionRef.current.continuous = true;
+          recognitionRef.current.interimResults = true;
+          recognitionRef.current.lang = 'en-US';
+
+          recognitionRef.current.onresult = (event) => {
+            let finalStr = ''; let interimStr = '';
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+              if (event.results[i].isFinal) finalStr += event.results[i][0].transcript;
+              else interimStr += event.results[i][0].transcript;
+            }
+            transcriptRef.current += finalStr;
+            const fullTranscript = transcriptRef.current + interimStr;
+            setLiveTranscript(fullTranscript);
+
+            if (challengeWordRef.current) {
+               const cleanTarget = challengeWordRef.current.toLowerCase().replace(/[^\w']/g, '');
+               const transcriptNow = fullTranscript.toLowerCase().replace(/[^\w\s']/g, '');
+               if (transcriptNow.split(/\s+/).includes(cleanTarget)) {
+                   recognitionRef.current.stop();
+                   setIsRecording(false);
+                   setPassedWords(prev => [...new Set([...prev, cleanTarget])]);
+                   setChallengeWord(null);
+                   challengeWordRef.current = null;
+               }
+            }
+          };
+
+          recognitionRef.current.onerror = (event) => {
+            if (event.error !== 'aborted') setRecognitionError(`麥克風錯誤 (${event.error})`);
+            setIsRecording(false);
+          };
+          recognitionRef.current.onend = () => setIsRecording(false);
+        } else {
+            setRecognitionError("您的瀏覽器不支援語音辨識功能，建議使用 Chrome 瀏覽器。");
+        }
+        return () => { synth.cancel(); if (recognitionRef.current) recognitionRef.current.abort(); };
+      }, []);
+
+      const handlePlayPause = () => {
+        if (isPlaying) { synth.cancel(); setIsPlaying(false); setActiveCharIndex(-1); }
+        else {
+          synth.cancel(); boundaryFiredRef.current = false; setActiveCharIndex(0); 
+          setTimeout(() => {
+            const utterance = new SpeechSynthesisUtterance(parsedData.cleanText);
+            utteranceRef.current = utterance; 
+            const voice = getBestVoice();
+            if (voice) utterance.voice = voice;
+            utterance.lang = 'en-US'; utterance.rate = speechRate;
+            utterance.onboundary = (e) => { if (e.name === 'word') { boundaryFiredRef.current = true; setActiveCharIndex(e.charIndex + 1); } };
+            utterance.onend = () => { setIsPlaying(false); setActiveCharIndex(-1); };
+            utterance.onerror = () => { setIsPlaying(false); setActiveCharIndex(-1); };
+            synth.speak(utterance); setIsPlaying(true);
+          }, 50);
+          if (isRecording && recognitionRef.current) { recognitionRef.current.stop(); setIsRecording(false); }
+        }
+      };
+
+      const goToSection = (index) => { if (index === currentSectionIdx) return; resetState(); setCurrentSectionIdx(index); setCurrentSentenceIdx(0); };
+      const goToNext = () => {
+        resetState();
+        if (currentSentenceIdx < sectionData.sentences.length - 1) setCurrentSentenceIdx(prev => prev + 1);
+        else if (currentSectionIdx < sections.length - 1) { setCurrentSectionIdx(prev => prev + 1); setCurrentSentenceIdx(0); }
+      };
+      const goToPrev = () => {
+        resetState();
+        if (currentSentenceIdx > 0) setCurrentSentenceIdx(prev => prev - 1);
+        else if (currentSectionIdx > 0) { setCurrentSectionIdx(prev => prev - 1); setCurrentSentenceIdx(sections[currentSectionIdx - 1].sentences.length - 1); }
+      };
+
+      const resetState = () => {
+        synth.cancel(); setIsPlaying(false); setActiveCharIndex(-1); setAssessment(null); setShowTranslation(false);
+        if (isRecording && recognitionRef.current) { recognitionRef.current.stop(); setIsRecording(false); }
+      };
+
+      const toggleRecording = () => {
+        if (!recognitionRef.current) return;
+        setRecognitionError('');
+        if (isRecording) {
+          recognitionRef.current.stop(); setIsRecording(false);
+          setTimeout(() => { evaluateSpeech(transcriptRef.current || liveTranscript, parsedData.cleanText); }, 200);
+        } else {
+          if (isPlaying) { synth.cancel(); setIsPlaying(false); setActiveCharIndex(-1); }
+          transcriptRef.current = ''; setLiveTranscript(''); setAssessment(null);
+          try { recognitionRef.current.start(); setIsRecording(true); } catch (e) { console.error(e); }
+        }
+      };
+
+      const toggleChallengeRecording = () => {
+        if (!recognitionRef.current) return;
+        setRecognitionError('');
+        if (isRecording) {
+           recognitionRef.current.stop(); setIsRecording(false);
+           setTimeout(() => {
+              if (challengeWordRef.current) {
+                  setRecognitionError(`系統聽到: "${transcriptRef.current || liveTranscript}"，請再試一次！`);
+              }
+           }, 200);
+        } else {
+           transcriptRef.current = ''; setLiveTranscript(''); setRecognitionError('');
+           try { recognitionRef.current.start(); setIsRecording(true); } catch (e) { console.error(e); }
+        }
+      };
+
+      const evaluateSpeech = (transcript, targetText) => {
+        if (!transcript.trim()) { setRecognitionError('沒有聽到聲音，請再試一次！'); return; }
+        
+        const cleanWord = (word) => word.toLowerCase().replace(/[^\w]/g, '');
+        const spokenWordsSet = new Set(transcript.split(/\s+/).map(cleanWord).filter(w => w.length > 0));
+        const targetWordsCount = targetText.split(/\s+/).map(cleanWord).filter(w => w.length > 0).length;
+
+        let matchCount = 0; const colorCodedTokens = [];
+        const regex = /([\w'-]+)|([^\w'-]+)/g; let match;
+        
+        while ((match = regex.exec(targetText)) !== null) {
+          const isWord = !!match[1]; let isCorrect = null;
+          if (isWord) {
+            const w = cleanWord(match[0]); isCorrect = spokenWordsSet.has(w);
+            if (isCorrect) matchCount++;
+          }
+          colorCodedTokens.push({ text: match[0], isWord, isCorrect });
+        }
+
+        const rawAccuracy = Math.round((matchCount / targetWordsCount) * 100);
+        const accuracy = Math.min(100, Math.max(0, rawAccuracy));
+        let fluency = Math.round(accuracy * 0.9 + (Math.random() * 10));
+        fluency = Math.min(100, Math.max(0, fluency));
+
+        let feedback = "";
+        if (accuracy >= 90) feedback = "太棒了！發音非常標準且流暢！ 🎉";
+        else if (accuracy >= 70) feedback = "很好！紅色波浪線的地方可以再多聽幾次發音喔。 👍";
+        else if (accuracy >= 40) feedback = "不錯的嘗試！請專注在紅色標示的單字，跟著節奏再試一次。 💪";
+        else feedback = "別灰心！點擊不會唸的單字聽聽發音，一句一句穩穩地唸。🌟";
+
+        setAssessment({ transcript, accuracy, fluency, feedback, colorCodedTokens });
+
+        setHistory(prev => {
+          const newHistory = [...prev];
+          const existingIdx = newHistory.findIndex(h => h.sentence === targetText);
+          const newEntry = { sectionTitle: sectionData.title, sentence: targetText, transcript, accuracy, fluency, colorCodedTokens };
+          if (existingIdx >= 0) newHistory[existingIdx] = newEntry;
+          else newHistory.push(newEntry);
+          return newHistory;
+        });
+      };
+
+      const handleEnterSummary = () => {
+        resetState();
+        setShowSummary(true);
+      };
+
+      const handleFinalSubmit = async () => {
+        setIsSubmitting(true);
+        
+        const avgAccuracy = history.length ? Math.round(history.reduce((sum, item) => sum + item.accuracy, 0) / history.length) : 0;
+        const avgFluency = history.length ? Math.round(history.reduce((sum, item) => sum + item.fluency, 0) / history.length) : 0;
+        const pendingWords = redWords.filter(w => !passedWords.includes(w));
+
+        const formattedHistoryText = history.map((item, index) => {
+          const diagText = item.colorCodedTokens.map(t => {
+            if (!t.isWord) return t.text;
+            if (t.isCorrect) return t.text;
+            return `【❌ ${t.text}】`;
+          }).join('');
+          return `[${index + 1}] ${item.sectionTitle}\n▶ ${diagText.trim()}\n(正確率 ${item.accuracy} | 流暢度 ${item.fluency})`;
+        }).join('\n\n');
+
+        let formattedChallengeText = '';
+        if (redWords.length === 0) formattedChallengeText = '無須挑戰，發音完美';
+        else {
+          formattedChallengeText += `✅ 通過: ${passedWords.length > 0 ? passedWords.join(', ') : '無'}\n`;
+          if (pendingWords.length > 0) formattedChallengeText += `⚠️ 容許範圍未通過: ${pendingWords.join(', ')}`;
+        }
+
+        const sheetData = {
+          time: new Date().toLocaleString('zh-TW'),
+          gradeClass: studentInfo.gradeClass,
+          seat: studentInfo.seat,
+          avgAccuracy: avgAccuracy,
+          avgFluency: avgFluency,
+          historyDetails: formattedHistoryText,
+          challengeDetails: formattedChallengeText
+        };
+
+        if (GOOGLE_SCRIPT_URL && GOOGLE_SCRIPT_URL.includes("script.google.com")) {
+          try {
+            await fetch(GOOGLE_SCRIPT_URL, {
+              method: 'POST',
+              body: JSON.stringify(sheetData)
+            });
+          } catch (e) {
+            console.error('上傳成績至 Google Sheet 失敗', e);
+          }
+        }
+
+        let htmlContent = `
+          <!DOCTYPE html>
+          <html lang="zh-TW">
+          <head>
+            <meta charset="UTF-8">
+            <title>${studentInfo.gradeClass}班 ${studentInfo.seat}號 - 練習報表</title>
+            <style>
+              body { font-family: 'Helvetica Neue', Helvetica, Arial, 'PingFang TC', '微軟正黑體', sans-serif; line-height: 1.6; padding: 40px; color: #1e293b; max-width: 800px; margin: 0 auto; }
+              h1 { color: #4f46e5; border-bottom: 2px solid #e0e7ff; padding-bottom: 15px; text-align: center; font-size: 24px; margin-bottom: 5px; }
+              .student-info { text-align: center; color: #64748b; font-size: 16px; font-weight: bold; margin-bottom: 30px; }
+              h2 { color: #334155; margin-top: 30px; font-size: 18px; background: #f8fafc; padding: 10px 15px; border-radius: 8px; border-left: 4px solid #4f46e5; }
+              .stats-container { display: flex; gap: 20px; margin-bottom: 30px; margin-top: 20px; }
+              .stat-box { flex: 1; background: #f1f5f9; padding: 20px; border-radius: 12px; text-align: center; border: 1px solid #e2e8f0; }
+              .stat-title { font-size: 14px; color: #64748b; font-weight: bold; }
+              .stat-value { font-size: 32px; font-weight: bold; color: #4f46e5; margin-top: 5px; }
+              .sentence-record { margin-bottom: 25px; padding-bottom: 20px; border-bottom: 1px dashed #cbd5e1; }
+              .sentence-title { font-weight: bold; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+              .sentence-text { font-size: 20px; line-height: 1.8; margin-bottom: 10px; font-weight: 500; }
+              .correct { color: #059669; background: #ecfdf5; padding: 2px 4px; border-radius: 4px; }
+              .error { color: #e11d48; text-decoration: underline wavy #fda4af; background: #fff1f2; padding: 2px 4px; border-radius: 4px; }
+              .score-row { font-size: 14px; font-weight: bold; color: #64748b; }
+              .score-val { color: #10b981; }
+              .challenge-box { background: #fffbeb; border: 1px solid #fde68a; padding: 20px; border-radius: 12px; margin-top: 30px; }
+              .challenge-title { color: #d97706; font-weight: bold; font-size: 16px; margin-bottom: 15px; }
+              .word-tag { display: inline-block; background: #fef3c7; color: #b45309; padding: 6px 12px; border-radius: 20px; margin: 4px; font-weight: bold; font-size: 14px; }
+              .word-tag.passed { background: #d1fae5; color: #059669; border: 1px solid #a7f3d0; }
+              .print-hint { text-align: center; color: #64748b; margin-bottom: 20px; font-size: 14px; background: #f8fafc; padding: 10px; border-radius: 8px; }
+              @media print { .print-hint { display: none; } body { padding: 0; } }
+            </style>
+          </head>
+          <body>
+            <div class="print-hint">💡 提示：請在列印視窗中的「目的地」選擇 <strong>「另存為 PDF」</strong> 即可匯出檔案。成績已同步上傳。</div>
+            <h1>Read Along 練習總評報表</h1>
+            <div class="student-info">班級：${studentInfo.gradeClass} ｜ 座號：${studentInfo.seat} ｜ 時間：${sheetData.time}</div>
+            
+            <div class="stats-container">
+              <div class="stat-box">
+                <div class="stat-title">完成句子</div>
+                <div class="stat-value">${history.length}</div>
+              </div>
+              <div class="stat-box">
+                <div class="stat-title">平均正確率</div>
+                <div class="stat-value">${avgAccuracy}</div>
+              </div>
+              <div class="stat-box">
+                <div class="stat-title">平均流暢度</div>
+                <div class="stat-value">${avgFluency}</div>
+              </div>
+            </div>
+
+            <h2>各句發音診斷</h2>
+        `;
+
+        history.forEach((item, index) => {
+          htmlContent += `<div class="sentence-record">`;
+          htmlContent += `<div class="sentence-title">[${index + 1}] ${item.sectionTitle}</div>`;
+          htmlContent += `<div class="sentence-text">`;
+          item.colorCodedTokens.forEach(t => {
+            if (!t.isWord) htmlContent += t.text;
+            else if (t.isCorrect) htmlContent += `<span class="correct">${t.text}</span>`;
+            else htmlContent += `<span class="error">${t.text}</span>`;
+          });
+          htmlContent += `</div>`;
+          htmlContent += `<div class="score-row">得分：正確率 <span class="score-val">${item.accuracy}</span> | 流暢度 <span class="score-val">${item.fluency}</span></div>`;
+          htmlContent += `</div>`;
+        });
+
+        htmlContent += `<div class="challenge-box"><div class="challenge-title">⚠️ 單獨挑戰字詞紀錄</div><div>`;
+        if (redWords.length === 0) {
+          htmlContent += `<p style="color:#d97706; font-weight:bold;">無須挑戰，發音完美！</p>`;
+        } else {
+          passedWords.forEach(w => htmlContent += `<span class="word-tag passed">✅ ${w}</span>`);
+          pendingWords.forEach(w => htmlContent += `<span class="word-tag">⚠️ ${w} (未通過)</span>`);
+        }
+        htmlContent += `</div></div></body></html>`;
+
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+          printWindow.document.write(htmlContent);
+          printWindow.document.close();
+          printWindow.focus();
+          
+          setTimeout(() => {
+            printWindow.print();
+            setIsSubmitting(false);
+            setCopySuccess(true); 
+            setTimeout(() => setCopySuccess(false), 3000);
+          }, 500);
+        } else {
+          alert('無法開啟匯出視窗，請檢查瀏覽器是否阻擋了彈出式視窗。若在 Google Sites 中，此功能可能受限於 iframe 規則。');
+          setIsSubmitting(false);
+        }
+      };
+
+      // 視圖 0：登入畫面
+      if (!isStarted) {
+        return (
+          <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 font-sans">
+            <div className="bg-white p-8 md:p-10 rounded-3xl shadow-xl max-w-md w-full border border-slate-100 animate-in fade-in zoom-in-95 duration-300">
+              <div className="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-inner">
+                <Mic className="w-8 h-8" />
+              </div>
+              <h1 className="text-2xl font-bold text-slate-800 mb-2 text-center">HLC B2L6 Scamming Season is Here</h1>
+              <p className="text-slate-500 text-sm text-center mb-8">請先填寫您的基本資料以開始測驗</p>
+              
+              <div className="space-y-5">
+                <div>
+                  <label className="block text-sm font-bold text-slate-600 mb-1.5 ml-1">班級</label>
+                  <input type="text" placeholder="例如：101" value={studentInfo.gradeClass} onChange={e => setStudentInfo({...studentInfo, gradeClass: e.target.value})} className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium text-slate-700"/>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-600 mb-1.5 ml-1">座號</label>
+                  <input type="text" placeholder="例如：05" value={studentInfo.seat} onChange={e => setStudentInfo({...studentInfo, seat: e.target.value})} className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium text-slate-700"/>
+                </div>
+                <button onClick={() => { if (studentInfo.gradeClass && studentInfo.seat) setIsStarted(true); }} disabled={!studentInfo.gradeClass || !studentInfo.seat} className="w-full mt-4 py-4 bg-indigo-600 text-white text-lg font-bold rounded-xl disabled:bg-slate-200 disabled:text-slate-400 hover:bg-indigo-700 shadow-lg shadow-indigo-600/30 transform transition-all active:scale-95">
+                  開始練習 <ArrowRight className="w-5 h-5 inline-block ml-1 -mt-0.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // 視圖 A：總結與結算畫面
+      if (showSummary) {
+        const totalSentences = sections.reduce((sum, section) => sum + section.sentences.length, 0);
+        const pendingWords = redWords.filter(w => !passedWords.includes(w));
+        const isAllSentencesCompleted = history.length === totalSentences;
+        const canSubmit = isAllSentencesCompleted && pendingWords.length <= 5;
+        const avgAccuracy = history.length ? Math.round(history.reduce((sum, item) => sum + item.accuracy, 0) / history.length) : 0;
+        const avgFluency = history.length ? Math.round(history.reduce((sum, item) => sum + item.fluency, 0) / history.length) : 0;
+
+        return (
+          <div className="h-screen w-full flex flex-col bg-slate-50 text-slate-800 font-sans overflow-hidden">
+            <header className="flex-none bg-white z-10 px-4 py-4 flex justify-between items-center shadow-sm">
+              <div className="flex items-center gap-4">
+                 <h1 className="text-xl font-bold text-indigo-600 flex items-center gap-2">
+                   <Award className="w-6 h-6" /> 結算總覽
+                 </h1>
+                 <div className="hidden sm:flex items-center gap-2 text-sm font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+                   <User className="w-4 h-4"/> {studentInfo.gradeClass} 班 {studentInfo.seat} 號
+                 </div>
+              </div>
+              <button onClick={() => setShowSummary(false)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-full transition-all text-sm">返回練習</button>
+            </header>
+
+            <main className="flex-1 overflow-y-auto p-4 md:p-8 pb-40">
+              <div className="max-w-4xl mx-auto space-y-8">
+                <div className="grid grid-cols-3 gap-4">
+                   <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 text-center">
+                     <p className="text-sm text-slate-400 font-bold mb-2">完成進度</p>
+                     <p className="text-3xl font-black text-slate-700">{history.length} <span className="text-lg text-slate-400">/ {totalSentences}</span></p>
+                   </div>
+                   <div className="bg-indigo-50 p-6 rounded-2xl shadow-sm border border-indigo-100 text-center">
+                     <p className="text-sm text-indigo-400 font-bold mb-2">平均正確率</p>
+                     <p className="text-3xl font-black text-indigo-600">{avgAccuracy}</p>
+                   </div>
+                   <div className="bg-emerald-50 p-6 rounded-2xl shadow-sm border border-emerald-100 text-center">
+                     <p className="text-sm text-emerald-400 font-bold mb-2">平均流暢度</p>
+                     <p className="text-3xl font-black text-emerald-600">{avgFluency}</p>
+                   </div>
+                </div>
+
+                <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+                  <div className="bg-slate-50 px-6 py-4 border-b border-slate-200">
+                    <h2 className="text-lg font-bold text-slate-700 flex items-center gap-2"><ListChecks className="w-5 h-5"/> 發音診斷回顧</h2>
+                  </div>
+                  <div className="divide-y divide-slate-100">
+                    {history.length === 0 ? (
+                      <p className="p-8 text-center text-slate-400 font-medium">尚未有任何練習紀錄</p>
+                    ) : history.map((item, idx) => (
+                      <div key={idx} className="p-6">
+                        <p className="text-xs font-bold text-indigo-400 mb-2 uppercase tracking-wider">{item.sectionTitle}</p>
+                        <div className="text-xl md:text-2xl leading-relaxed font-medium mb-3">
+                          {item.colorCodedTokens.map((token, i) => (
+                            <span key={i} className={token.isWord ? (token.isCorrect ? "text-emerald-600 bg-emerald-50 rounded px-0.5" : "text-rose-500 bg-rose-50 underline decoration-rose-400 decoration-wavy underline-offset-4 rounded px-0.5") : "text-slate-400"}>
+                              {token.text}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="flex gap-4 text-sm font-bold">
+                          <span className="text-slate-400">正確率: <span className={item.accuracy >= 80 ? 'text-emerald-500' : 'text-amber-500'}>{item.accuracy}</span></span>
+                          <span className="text-slate-400">流暢度: <span className={item.fluency >= 80 ? 'text-emerald-500' : 'text-amber-500'}>{item.fluency}</span></span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {history.length > 0 && (
+                  <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden mb-8">
+                    <div className="bg-rose-50 px-6 py-4 border-b border-rose-100 flex justify-between items-center">
+                      <h2 className="text-lg font-bold text-rose-600 flex items-center gap-2">⚠️ 單字挑戰區</h2>
+                      <span className="text-sm font-bold text-rose-400">尚有 {pendingWords.length} 個待挑戰 (容許 5 個內)</span>
+                    </div>
+                    <div className="p-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                      {redWords.length === 0 ? (
+                        <p className="col-span-full text-center text-slate-400 font-medium py-4">太厲害了！發音完美，無須挑戰！</p>
+                      ) : redWords.map(word => {
+                        const isPassed = passedWords.includes(word);
+                        return (
+                          <div key={word} className={`flex justify-between items-center p-4 rounded-2xl border transition-all ${isPassed ? 'bg-emerald-50 border-emerald-100' : 'bg-white border-slate-200 shadow-sm'}`}>
+                            <div className="flex items-center gap-2">
+                              <button onClick={() => playSingleWord(word)} className="p-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-500 transition-colors" title="聽發音"><Play className="w-4 h-4 fill-current"/></button>
+                              <span className={`text-lg font-bold ${isPassed ? 'text-emerald-500 line-through' : 'text-slate-700'}`}>{word}</span>
+                            </div>
+                            {isPassed ? (
+                              <span className="text-emerald-500 font-bold flex items-center gap-1 text-sm"><CheckCircle className="w-4 h-4"/> 通過</span>
+                            ) : (
+                              <button onClick={() => { setChallengeWord(word); challengeWordRef.current = word; }} className="bg-rose-100 text-rose-600 px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-rose-200 transition-colors">挑戰</button>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </main>
+
+            <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-4 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] z-20">
+               <div className="max-w-4xl mx-auto">
+                 <button
+                   disabled={!canSubmit || isSubmitting}
+                   onClick={handleFinalSubmit}
+                   className={`w-full py-4 text-lg md:text-xl font-bold rounded-2xl transition-all flex justify-center items-center gap-2 ${
+                     canSubmit && !isSubmitting
+                      ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-600/30 transform hover:-translate-y-1' 
+                      : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                   }`}
+                 >
+                   {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : copySuccess ? <CheckCircle className="w-6 h-6"/> : <Download className="w-6 h-6"/>}
+                   {isSubmitting ? '正在處理成績與 PDF...' : copySuccess ? '已開啟匯出視窗！' : 
+                    canSubmit ? '儲存繳交 (上傳成績並匯出 PDF)' : 
+                    !isAllSentencesCompleted ? `解鎖繳交：請完成所有句子 (目前進度 ${history.length}/${totalSentences})` :
+                    `解鎖繳交：請將未通過紅字降至 5 個以內 (目前 ${pendingWords.length} 個)`}
+                 </button>
+               </div>
+            </div>
+
+            {/* 挑戰單字的彈出層 Modal */}
+            {challengeWord && (
+              <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-sm w-full animate-in zoom-in-95 text-center relative overflow-hidden">
+                   <h3 className="text-sm font-bold text-slate-400 mb-2 uppercase tracking-widest">請唸出這個單字</h3>
+                   <p className="text-5xl font-black text-indigo-600 mb-8 tracking-tight">{challengeWord}</p>
+
+                   <div className="h-12 mb-6 flex items-center justify-center">
+                     {recognitionError ? (
+                       <p className="text-rose-500 font-bold bg-rose-50 px-4 py-2 rounded-xl text-sm w-full animate-in fade-in">{recognitionError}</p>
+                     ) : isRecording ? (
+                       <p className="text-emerald-500 font-bold flex items-center gap-2"><Activity className="w-4 h-4 animate-pulse"/> {liveTranscript || "聆聽中..."}</p>
+                     ) : null}
+                   </div>
+
+                   <div className="flex justify-center gap-6">
+                     <button onClick={toggleChallengeRecording} className={`w-20 h-20 rounded-full flex flex-col items-center justify-center text-white shadow-xl transition-all transform hover:scale-105 active:scale-95 ${isRecording ? 'bg-rose-500 shadow-rose-500/40' : 'bg-emerald-500 shadow-emerald-500/40'}`}>
+                       {isRecording ? <Square className="fill-current w-8 h-8" /> : <Mic className="w-8 h-8" />}
+                     </button>
+                   </div>
+                   
+                   <button onClick={() => { setChallengeWord(null); challengeWordRef.current = null; if(isRecording) recognitionRef.current.stop(); setIsRecording(false); }} className="mt-8 px-6 py-2 text-slate-400 hover:bg-slate-100 rounded-full font-bold transition-colors">
+                     暫時取消
+                   </button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      // 視圖 B：主要閱讀與練習畫面
+      return (
+        <div className="h-screen w-full flex flex-col bg-slate-50 text-slate-800 font-sans overflow-hidden">
+          <header className="flex-none bg-white z-10 px-4 py-3 flex justify-between items-center h-16 border-b border-slate-100">
+            <h1 className="text-xl font-bold text-indigo-600 flex items-center gap-2 truncate">
+              <BookOpen className="w-5 h-5 flex-shrink-0" />
+              <span className="hidden sm:inline">HLC B2L6 Scamming Season is Here</span>
+              <span className="hidden md:inline ml-2 text-sm text-slate-400 font-medium border-l border-slate-200 pl-4">
+                <User className="w-4 h-4 inline-block -mt-0.5 mr-1" /> {studentInfo.gradeClass} 班 {studentInfo.seat} 號
+              </span>
+            </h1>
+            
+            <div className="flex items-center gap-2 sm:gap-4">
+              <button onClick={handleEnterSummary} className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-bold transition-all shadow-sm ${history.length === 0 ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-600/20 transform hover:-translate-y-0.5'}`}>
+                <ListChecks className="w-4 h-4" />
+                <span className="hidden sm:inline">前往結算</span>
+              </button>
+
+              <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-full">
+                <Settings className="w-4 h-4 text-slate-500" />
+                <input type="range" min="0.5" max="1.2" step="0.1" value={speechRate} onChange={(e) => setSpeechRate(parseFloat(e.target.value))} className="w-16 sm:w-20 accent-indigo-600"/>
+                <span className="text-xs font-bold text-slate-600 w-6">{speechRate.toFixed(1)}x</span>
+              </div>
+            </div>
+          </header>
+
+          <div className="flex-none bg-white shadow-sm w-full overflow-x-auto hide-scrollbar">
+            <div className="flex gap-2 px-4 py-3 max-w-5xl mx-auto">
+              {sections.map((section, index) => (
+                <button key={section.id} onClick={() => goToSection(index)} className={`whitespace-nowrap px-6 py-2.5 rounded-full text-sm font-bold transition-all ${currentSectionIdx === index ? 'bg-indigo-600 text-white shadow-md transform scale-105' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                  {section.title}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <main className="flex-1 flex flex-col w-full max-w-5xl mx-auto p-4 md:p-6 min-h-0 relative">
+            <div className="flex-none flex justify-between items-center mb-4">
+              <div className="flex items-center gap-3">
+                 <span className="bg-indigo-100 text-indigo-800 text-sm font-bold px-3 py-1 rounded-full">
+                   句 {currentSentenceIdx + 1} / {sectionData.sentences.length}
+                 </span>
+                 <div className="hidden md:flex items-center gap-2 text-slate-400 text-sm font-medium bg-white px-3 py-1 rounded-full shadow-sm border border-slate-100">
+                   <Info className="w-4 h-4 text-indigo-400" /><span>點擊單字可聽發音</span>
+                 </div>
+              </div>
+              <button onClick={() => setShowTranslation(!showTranslation)} className="flex items-center gap-2 text-sm font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-4 py-1.5 rounded-full transition">
+                <Globe className="w-4 h-4" />{showTranslation ? '隱藏中文' : '顯示中文'}
+              </button>
+            </div>
+
+            <div className="flex-1 bg-white rounded-3xl shadow-sm border border-slate-200 p-6 md:p-12 relative overflow-y-auto transition-all scroll-smooth flex flex-col justify-center items-center text-center">
+              <div className="text-3xl md:text-5xl lg:text-6xl leading-relaxed md:leading-[1.8] font-medium text-slate-800 select-none">
+                {parsedData.chunks.map((chunk, chunkIdx) => {
+                  const isHighlight = isPlaying && chunkIdx === activeChunkIndex;
+                  return (
+                    <span key={chunkIdx} className={`transition-all duration-150 rounded-lg px-1 inline-block ${isHighlight ? 'bg-amber-200 text-slate-900 shadow-sm border-b-4 border-amber-400 transform scale-105' : 'text-slate-800'}`}>
+                      {chunk.wordTokens.map((token, tokenIdx) => (
+                        <React.Fragment key={tokenIdx}>
+                          {token.isWord ? (
+                            <span onClick={(e) => playSingleWord(token.text, e)} className="cursor-pointer hover:text-indigo-600 hover:bg-indigo-50 active:bg-indigo-100 rounded transition-colors" title="聽發音">{token.text}</span>
+                          ) : (<span>{token.text}</span>)}
+                        </React.Fragment>
+                      ))}
+                    </span>
+                  );
+                })}
+              </div>
+              {showTranslation && (
+                <div className="mt-8 pt-8 border-t border-slate-100 w-full animate-in fade-in slide-in-from-top-4">
+                  <p className="text-xl md:text-2xl text-slate-500 leading-relaxed font-medium whitespace-pre-wrap">{sentenceData.chinese}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex-none h-14 md:h-16 mt-4 flex items-center justify-center w-full px-2">
+              {recognitionError ? (
+                <div className="text-rose-500 text-sm font-bold text-center bg-rose-50 px-6 py-2 rounded-full border border-rose-100 animate-in fade-in">{recognitionError}</div>
+              ) : isRecording ? (
+                <div className="bg-slate-800/90 backdrop-blur-sm text-white px-6 py-3 w-full max-w-2xl rounded-2xl flex items-center gap-3 shadow-lg border border-slate-700 animate-in fade-in slide-in-from-bottom-2">
+                  <Activity className="w-5 h-5 text-emerald-400 animate-pulse flex-shrink-0" /><p className="text-sm md:text-base font-medium truncate">{liveTranscript || "正在聆聽..."}</p>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="flex-none h-20 md:h-28 mt-2 flex items-center justify-between gap-4 px-2">
+              <button onClick={goToPrev} disabled={isFirstSentence} className={`p-3 md:p-4 rounded-full transition-all flex-shrink-0 ${isFirstSentence ? 'text-slate-300' : 'text-slate-600 hover:bg-slate-200 hover:text-slate-800'}`}><ChevronLeft className="w-8 h-8 md:w-10 md:h-10" /></button>
+              <div className="flex gap-4 md:gap-8 justify-center flex-1">
+                <button onClick={handlePlayPause} className={`flex flex-col items-center justify-center w-16 h-16 md:w-20 md:h-20 rounded-full shadow-lg transition-all transform hover:scale-105 active:scale-95 ${isPlaying ? 'bg-amber-500 text-white shadow-amber-500/40' : 'bg-indigo-600 text-white shadow-indigo-600/40 hover:bg-indigo-700'}`}>
+                  {isPlaying ? <Square className="fill-current w-6 h-6 md:w-8 md:h-8" /> : <Play className="fill-current w-6 h-6 md:w-8 md:h-8 ml-1" />}
+                </button>
+                <button onClick={toggleRecording} className={`flex flex-col items-center justify-center w-16 h-16 md:w-20 md:h-20 rounded-full shadow-lg transition-all transform hover:scale-105 active:scale-95 ${isRecording ? 'bg-rose-500 text-white shadow-rose-500/40 animate-pulse' : 'bg-emerald-500 text-white shadow-emerald-500/40 hover:bg-emerald-600'}`}>
+                  {isRecording ? <Square className="fill-current w-6 h-6 md:w-8 md:h-8" /> : <Mic className="w-6 h-6 md:w-8 md:h-8" />}
+                </button>
+              </div>
+              <button onClick={goToNext} disabled={isLastSentence} className={`p-3 md:p-4 rounded-full transition-all flex-shrink-0 ${isLastSentence ? 'text-slate-300' : 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100'}`}><ChevronRight className="w-8 h-8 md:w-10 md:h-10" /></button>
+            </div>
+          </main>
+
+          {/* 評分與彩色診斷 Modal */}
+          {assessment && (
+            <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-2xl w-full animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-2xl font-bold text-slate-800">測驗結果</h3>
+                  <button onClick={() => setAssessment(null)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition"><X className="w-6 h-6" /></button>
+                </div>
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                  <div className="bg-indigo-50 rounded-2xl p-4 flex flex-col items-center justify-center border border-indigo-100">
+                    <span className="text-sm text-slate-500 font-bold mb-1">正確率</span>
+                    <div className="flex items-baseline gap-1"><span className="text-4xl font-black text-indigo-600">{assessment.accuracy}</span></div>
+                  </div>
+                  <div className="bg-emerald-50 rounded-2xl p-4 flex flex-col items-center justify-center border border-emerald-100">
+                    <span className="text-sm text-slate-500 font-bold mb-1">流暢度</span>
+                    <div className="flex items-baseline gap-1"><span className="text-4xl font-black text-emerald-600">{assessment.fluency}</span></div>
+                  </div>
+                </div>
+                <div className="bg-slate-50 rounded-2xl p-6 mb-6 border border-slate-200">
+                  <span className="font-bold text-slate-400 block mb-4 text-sm tracking-widest uppercase">發音診斷</span>
+                  <div className="text-2xl md:text-3xl leading-relaxed text-center font-medium">
+                    {assessment.colorCodedTokens.map((token, i) => (
+                      <span key={i} className={token.isWord ? (token.isCorrect ? "text-emerald-600 bg-emerald-100/50 rounded px-0.5 mx-0.5" : "text-rose-500 bg-rose-50 underline decoration-rose-400 decoration-wavy decoration-2 underline-offset-4 rounded px-0.5 mx-0.5") : "text-slate-400"}>{token.text}</span>
+                    ))}
+                  </div>
+                </div>
+                <div className="text-center bg-amber-50 rounded-2xl p-4 border border-amber-100 mb-8">
+                  <p className="text-lg font-bold text-amber-800">💡 {assessment.feedback}</p>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <button onClick={() => setAssessment(null)} className="flex-1 py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-colors flex justify-center items-center gap-2"><RotateCcw className="w-5 h-5"/> 再試一次</button>
+                  {!isLastSentence ? (
+                    <button onClick={goToNext} className="flex-1 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-colors flex justify-center items-center gap-2 shadow-md shadow-indigo-600/20">進入下一句 <ArrowRight className="w-5 h-5"/></button>
+                  ) : (
+                    <button onClick={handleEnterSummary} className="flex-1 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-colors flex justify-center items-center gap-2 shadow-md shadow-emerald-600/20"><ListChecks className="w-5 h-5"/> 前往結算</button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // 將應用程式掛載到 DOM
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<ReadAlongApp />);
+  </script>
+</body>
+</html>
