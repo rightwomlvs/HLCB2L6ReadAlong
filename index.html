@@ -33,7 +33,7 @@
 
     // === Google Apps Script Web App URL ===
     // 請替換為您自己的 GAS 網址
-    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzSxVckQ02tD5TSMMg6n-BjUYvYD_1XPwnwU7-2_kwQMJQDHqPBOWMVab78UBPnnqie/exec"; 
+    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyREtxmF8VChdPgiRgNPBWtcPDXISu8vNtizHLOhhRXQZ_fN4PTcpgA5BnglGSXt1tnow/exec"; 
     // =========================================================================
 
     // --- 圖示庫 (SVG 內聯元件，無須外部依賴) ---
@@ -229,16 +229,18 @@
       const isFirstSentence = currentSectionIdx === 0 && currentSentenceIdx === 0;
       const isLastSentence = currentSectionIdx === sections.length - 1 && currentSentenceIdx === sectionData.sentences.length - 1;
 
+      // 提取紅字名單（保留原始大小寫與格式）
       const redWords = useMemo(() => {
         const words = new Set();
         history.forEach(item => {
           item.colorCodedTokens.forEach(t => {
-            if (t.isWord && !t.isCorrect) words.add(t.text.toLowerCase());
+            if (t.isWord && !t.isCorrect) words.add(t.text);
           });
         });
         return Array.from(words);
       }, [history]);
 
+      // 解析字串為意群與單字
       const parsedData = useMemo(() => {
         const rawText = sentenceData.english;
         const cleanText = rawText.replace(/\|/g, ''); 
@@ -253,7 +255,8 @@
           const chunkEnd = currentIndex + chunkStr.length;
 
           const wordTokens = [];
-          const regex = /([\w'-]+)|([^\w'-]+)/g;
+          // 修正 Regex：包含千分位逗號，確保 5,000 會被視為單一個完整的詞彙
+          const regex = /([\w'-]+(?:,[\w'-]+)*)|([^\w'-]+)/g;
           let match;
           while ((match = regex.exec(chunkStr)) !== null) {
             wordTokens.push({ text: match[0], isWord: !!match[1] });
@@ -318,6 +321,50 @@
         synth.speak(utterance);
       };
 
+      // 【全新加入】：語音判斷優化引擎，解決數字、連字號、與複合詞的盲點判定
+      const checkWordCorrectness = (targetWord, transcriptText) => {
+        const cleanWord = (w) => w.toLowerCase().replace(/[^\w]/g, '');
+        const spokenSet = new Set(transcriptText.split(/\s+/).map(cleanWord).filter(w => w.length > 0));
+        
+        const raw = targetWord.toLowerCase();
+        const cleanTarget = raw.replace(/[^\w]/g, '');
+        if (!cleanTarget) return true;
+
+        if (spokenSet.has(cleanTarget)) return true;
+
+        // 處理連字號 (例如：sixteen-year-old -> 16 year old)
+        if (raw.includes('-')) {
+            const parts = raw.split('-').map(p => p.replace(/[^\w]/g, ''));
+            const mappedParts = parts.map(p => p === 'sixteen' ? '16' : p === 'seventeen' ? '17' : p);
+            if (mappedParts.every(p => spokenSet.has(p))) return true;
+            if (parts.every(p => spokenSet.has(p))) return true;
+        }
+
+        // 處理同音字與數字轉寫別名
+        const aliases = [];
+        if (raw === '5,000' || raw === '5000') aliases.push('5000', 'five', '5', 'thousand');
+        if (cleanTarget === 'sixteen') aliases.push('16');
+        if (cleanTarget === 'seventeen') aliases.push('17');
+        if (cleanTarget === 'to') aliases.push('too', 'two', '2');
+        if (cleanTarget === 'two') aliases.push('to', 'too', '2');
+        // 針對特定外來語或容易誤判的字詞加入容錯別名
+        if (cleanTarget === 'atayal') aliases.push('atayal', 'a tire', 'a tile', 'entire', 'attire');
+        
+        for (const alias of aliases) {
+            if (spokenSet.has(alias)) return true;
+        }
+
+        // 處理複合詞被系統切分的情況 (例如：AirTag -> air tag)
+        const transcriptNoSpaces = transcriptText.toLowerCase().replace(/[^a-z0-9]/g, '');
+        let mappedTarget = cleanTarget.replace(/sixteen/g, '16').replace(/seventeen/g, '17');
+
+        if (mappedTarget.length >= 4 && transcriptNoSpaces.includes(mappedTarget)) {
+            return true;
+        }
+
+        return false;
+      };
+
       useEffect(() => {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (SpeechRecognition) {
@@ -337,12 +384,12 @@
             setLiveTranscript(fullTranscript);
 
             if (challengeWordRef.current) {
-               const cleanTarget = challengeWordRef.current.toLowerCase().replace(/[^\w']/g, '');
-               const transcriptNow = fullTranscript.toLowerCase().replace(/[^\w\s']/g, '');
-               if (transcriptNow.split(/\s+/).includes(cleanTarget)) {
+               // 套用優化判定引擎
+               const isPassed = checkWordCorrectness(challengeWordRef.current, fullTranscript);
+               if (isPassed) {
                    recognitionRef.current.stop();
                    setIsRecording(false);
-                   setPassedWords(prev => [...new Set([...prev, cleanTarget])]);
+                   setPassedWords(prev => [...new Set([...prev, challengeWordRef.current])]);
                    setChallengeWord(null);
                    challengeWordRef.current = null;
                }
@@ -428,23 +475,22 @@
       const evaluateSpeech = (transcript, targetText) => {
         if (!transcript.trim()) { setRecognitionError('沒有聽到聲音，請再試一次！'); return; }
         
-        const cleanWord = (word) => word.toLowerCase().replace(/[^\w]/g, '');
-        const spokenWordsSet = new Set(transcript.split(/\s+/).map(cleanWord).filter(w => w.length > 0));
-        const targetWordsCount = targetText.split(/\s+/).map(cleanWord).filter(w => w.length > 0).length;
-
         let matchCount = 0; const colorCodedTokens = [];
-        const regex = /([\w'-]+)|([^\w'-]+)/g; let match;
+        const regex = /([\w'-]+(?:,[\w'-]+)*)|([^\w'-]+)/g; let match;
+        let targetWordsCount = 0;
         
         while ((match = regex.exec(targetText)) !== null) {
           const isWord = !!match[1]; let isCorrect = null;
           if (isWord) {
-            const w = cleanWord(match[0]); isCorrect = spokenWordsSet.has(w);
+            targetWordsCount++;
+            // 將逐字判定套用優化引擎
+            isCorrect = checkWordCorrectness(match[0], transcript);
             if (isCorrect) matchCount++;
           }
           colorCodedTokens.push({ text: match[0], isWord, isCorrect });
         }
 
-        const rawAccuracy = Math.round((matchCount / targetWordsCount) * 100);
+        const rawAccuracy = targetWordsCount > 0 ? Math.round((matchCount / targetWordsCount) * 100) : 100;
         const accuracy = Math.min(100, Math.max(0, rawAccuracy));
         let fluency = Math.round(accuracy * 0.9 + (Math.random() * 10));
         fluency = Math.min(100, Math.max(0, fluency));
